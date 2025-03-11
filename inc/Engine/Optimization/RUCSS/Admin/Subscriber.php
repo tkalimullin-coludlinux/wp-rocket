@@ -70,6 +70,7 @@ class Subscriber implements Subscriber_Interface {
 			'switch_theme'                            => 'truncate_used_css',
 			'permalink_structure_changed'             => 'truncate_used_css',
 			'rocket_domain_options_changed'           => 'truncate_used_css',
+			'rocket_host_fonts_locally_changed'       => 'delete_used_css_rows',
 			'wp_trash_post'                           => 'delete_used_css_on_update_or_delete',
 			'delete_post'                             => 'delete_used_css_on_update_or_delete',
 			'clean_post_cache'                        => 'delete_used_css_on_update_or_delete',
@@ -116,6 +117,10 @@ class Subscriber implements Subscriber_Interface {
 		}
 
 		if ( ! $this->is_deletion_enabled() ) {
+			return;
+		}
+
+		if ( 'attachment' === get_post_type( $post_id ) ) {
 			return;
 		}
 
@@ -206,7 +211,7 @@ class Subscriber implements Subscriber_Interface {
 	 *
 	 * @return void
 	 */
-	private function delete_used_css_rows() {
+	public function delete_used_css_rows() {
 		$this->used_css->delete_all_used_css();
 
 		if ( 0 < $this->used_css->get_not_completed_count() ) {
@@ -441,7 +446,6 @@ class Subscriber implements Subscriber_Interface {
 
 		if ( ! current_user_can( 'rocket_manage_options' ) ) {
 			wp_send_json_error();
-			return;
 		}
 
 		spawn_cron();
@@ -500,12 +504,13 @@ class Subscriber implements Subscriber_Interface {
 	/**
 	 * Disable RUCSS on wrong license.
 	 *
-	 * @return bool
+	 * @return null|false
 	 */
 	public function disable_russ_on_wrong_license() {
 		if ( false !== (bool) get_option( 'wp_rocket_no_licence' ) ) {
 			return false;
 		}
+
 		return null;
 	}
 

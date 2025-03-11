@@ -5,7 +5,6 @@ use WP_Rocket\Engine\Admin\Database\Optimization;
 use WP_Rocket\Engine\Admin\Beacon\Beacon;
 use WP_Rocket\Engine\License\API\UserClient;
 use WP_Rocket\Engine\Optimization\DelayJS\Admin\SiteList;
-use WP_Rocket\Interfaces\Render_Interface;
 use WP_Rocket\Engine\Optimization\DelayJS\Admin\Settings as DelayJSSettings;
 use WP_Rocket\Abstract_Render;
 use WP_Rocket\Admin\Options_Data;
@@ -106,20 +105,20 @@ class Page extends Abstract_Render {
 	 *
 	 * @since 3.0
 	 *
-	 * @param array            $args        Array of required arguments to add the admin page.
-	 * @param Settings         $settings    Instance of Settings class.
-	 * @param Render_Interface $render      Implementation of Render interface.
-	 * @param Beacon           $beacon      Beacon instance.
-	 * @param Optimization     $optimize    Database optimization instance.
-	 * @param UserClient       $user_client User client instance.
-	 * @param SiteList         $delayjs_sitelist User client instance.
-	 * @param string           $template_path Path to views.
-	 * @param Options_Data     $options       WP Rocket options instance.
+	 * @param array        $args        Array of required arguments to add the admin page.
+	 * @param Settings     $settings    Instance of Settings class.
+	 * @param Render       $render      Render instance.
+	 * @param Beacon       $beacon      Beacon instance.
+	 * @param Optimization $optimize    Database optimization instance.
+	 * @param UserClient   $user_client User client instance.
+	 * @param SiteList     $delayjs_sitelist User client instance.
+	 * @param string       $template_path Path to views.
+	 * @param Options_Data $options       WP Rocket options instance.
 	 */
 	public function __construct(
 		array $args,
 		Settings $settings,
-		Render_Interface $render,
+		Render $render,
 		Beacon $beacon,
 		Optimization $optimize,
 		UserClient $user_client,
@@ -271,7 +270,7 @@ class Page extends Abstract_Render {
 	 * @since 3.7.3 Update to use the user client class to get the data
 	 * @since 3.0
 	 *
-	 * @return object
+	 * @return array
 	 */
 	public function customer_data() {
 		$user = $this->user_client->get_user_data();
@@ -284,9 +283,21 @@ class Page extends Abstract_Render {
 
 		$data['license_type'] = rocket_get_license_type( $user );
 
-		$data['license_class']       = time() < $user->licence_expiration ? 'wpr-isValid' : 'wpr-isInvalid';
-		$data['license_expiration']  = date_i18n( get_option( 'date_format' ), (int) $user->licence_expiration );
-		$data['is_from_one_dot_com'] = (bool) $user->{'has_one-com_account'};
+		if ( ! is_object( $user ) ) {
+			return $data;
+		}
+
+		if ( ! empty( $user->licence_expiration ) ) {
+			$data['license_class'] = time() < $user->licence_expiration ? 'wpr-isValid' : 'wpr-isInvalid';
+		}
+
+		if ( ! empty( $user->licence_expiration ) ) {
+			$data['license_expiration'] = date_i18n( get_option( 'date_format' ), (int) $user->licence_expiration );
+		}
+
+		if ( isset( $user->{'has_one-com_account'} ) ) {
+			$data['is_from_one_dot_com'] = (bool) $user->{'has_one-com_account'};
+		}
 
 		return $data;
 	}
@@ -418,30 +429,6 @@ class Page extends Abstract_Render {
 				'customer_data'    => $this->customer_data(),
 			]
 		);
-
-		$this->settings->add_settings_sections(
-			[
-				'status' => [
-					'title' => __( 'My Status', 'rocket' ),
-					'page'  => 'dashboard',
-				],
-			]
-		);
-
-		$this->settings->add_settings_fields(
-			[
-				'analytics_enabled' => [
-					'type'              => 'sliding_checkbox',
-					'label'             => __( 'Rocket Analytics', 'rocket' ),
-					// translators: %1$s = opening <a> tag, %2$s = closing </a> tag.
-					'description'       => sprintf( __( 'I agree to share anonymous data with the development team to help improve WP Rocket. %1$sWhat info will we collect?%2$s', 'rocket' ), '<button class="wpr-js-popin">', '</button>' ),
-					'section'           => 'status',
-					'page'              => 'dashboard',
-					'default'           => 0,
-					'sanitize_callback' => 'sanitize_checkbox',
-				],
-			]
-		);
 	}
 
 	/**
@@ -464,9 +451,8 @@ class Page extends Abstract_Render {
 		$offline_beacon             = $this->beacon->get_suggest( 'offline' );
 		$fallback_css_beacon        = $this->beacon->get_suggest( 'fallback_css' );
 
-		$disable_combine_js  = $this->disable_combine_js();
-		$disable_combine_css = $this->disable_combine_css();
-		$disable_ocd         = 'local' === wp_get_environment_type();
+		$disable_combine_js = $this->disable_combine_js();
+		$disable_ocd        = 'local' === wp_get_environment_type();
 
 		/**
 		 * Filters the status of the RUCSS option.
@@ -526,9 +512,7 @@ class Page extends Abstract_Render {
 			]
 		);
 
-		$delay_js_list_helper  = esc_html__( 'If you have problems after activating this option, copy and paste the default exclusions to quickly resolve issues:', 'rocket' );
-		$delay_js_list_helper .= sprintf( '<br><pre><code>%1$s</code></pre><br>', implode( '<br>', DelayJSSettings::get_delay_js_default_exclusions() ) );
-		$delay_js_list_helper .= sprintf(
+		$delay_js_list_helper = sprintf(
 		// translators: %1$s = opening </a> tag, %2$s = closing </a> tag.
 			esc_html__( 'Also, please check our %1$sdocumentation%2$s for a list of compatibility exclusions.', 'rocket' ),
 			'<a href="' . esc_url( $delay_js_exclusions_beacon['url'] ) . '"  target="_blank" rel="noopener">',
@@ -551,7 +535,6 @@ class Page extends Abstract_Render {
 					'description'       => __( 'Minify CSS removes whitespace and comments to reduce the file size.', 'rocket' ),
 					'container_class'   => [
 						rocket_maybe_disable_minify_css() ? 'wpr-isDisabled' : '',
-						'wpr-field--parent',
 					],
 					'section'           => 'css',
 					'page'              => 'file_optimization',
@@ -559,11 +542,6 @@ class Page extends Abstract_Render {
 					'sanitize_callback' => 'sanitize_checkbox',
 					'input_attr'        => [
 						'disabled' => rocket_maybe_disable_minify_css() ? 1 : 0,
-					],
-					'warning'           => [
-						'title'        => __( 'This could break things!', 'rocket' ),
-						'description'  => __( 'If you notice any errors on your website after having activated this setting, just deactivate it again, and your site will be back to normal.', 'rocket' ),
-						'button_label' => __( 'Activate minify CSS', 'rocket' ),
 					],
 				],
 				'exclude_css'                  => [
@@ -681,7 +659,6 @@ class Page extends Abstract_Render {
 					'description'       => __( 'Minify JavaScript removes whitespace and comments to reduce the file size.', 'rocket' ),
 					'container_class'   => [
 						rocket_maybe_disable_minify_js() ? 'wpr-isDisabled' : '',
-						'wpr-field--parent',
 					],
 					'section'           => 'js',
 					'page'              => 'file_optimization',
@@ -690,11 +667,6 @@ class Page extends Abstract_Render {
 						'disabled' => rocket_maybe_disable_minify_js() ? 1 : 0,
 					],
 					'sanitize_callback' => 'sanitize_checkbox',
-					'warning'           => [
-						'title'        => __( 'This could break things!', 'rocket' ),
-						'description'  => __( 'If you notice any errors on your website after having activated this setting, just deactivate it again, and your site will be back to normal.', 'rocket' ),
-						'button_label' => __( 'Activate minify JavaScript', 'rocket' ),
-					],
 				],
 				'minify_concatenate_js'        => [
 					'type'              => 'checkbox',
@@ -803,8 +775,8 @@ class Page extends Abstract_Render {
 				'delay_js_exclusions_selected' => [
 					'type'              => 'categorized_multiselect',
 					'label'             => __( 'One-click exclusions', 'rocket' ),
-					'description'       => __( 'When using the Delay JavaScript Execution, you might experience delay loading elements located in the viewport that need to appear immediately - e.g. slider, header, menu.', 'rocket' ),
-					'sub_description'   => __( 'If you need instant visibility, click below on files that should NOT be delayed. This selection will help users interact with the elements straight away.', 'rocket' ),
+					'description'       => __( 'When using the Delay JavaScript feature, you might notice that some elements in the viewport take time to appear.', 'rocket' ),
+					'sub_description'   => __( 'If you need these elements to load immediately, select the related plugins, themes, or services below to ensure they appear without delay.', 'rocket' ),
 					'container_class'   => [
 						'wpr-field--children',
 					],
@@ -820,11 +792,11 @@ class Page extends Abstract_Render {
 				],
 				'delay_js_exclusions'          => [
 					'type'              => 'textarea',
-					'label'             => __( 'Excluded JavaScript Files', 'rocket' ),
-					'description'       => __( 'Specify URLs or keywords that can identify inline or JavaScript files to be excluded from delaying execution (one per line).', 'rocket' ),
 					'container_class'   => [
 						'wpr-field--children',
 					],
+					'label'             => __( 'Excluded JavaScript Files', 'rocket' ),
+					'description'       => __( 'Specify URLs or keywords that can identify inline or JavaScript files to be excluded from delaying execution (one per line).', 'rocket' ),
 					'parent'            => 'delay_js',
 					'section'           => 'js',
 					'page'              => 'file_optimization',
@@ -834,9 +806,34 @@ class Page extends Abstract_Render {
 						'disabled' => get_rocket_option( 'delay_js' ) ? 0 : 1,
 					],
 					'helper'            => DelayJSSettings::exclusion_list_has_default() ? $delay_js_found_list_helper : $delay_js_list_helper,
-					'placeholder'       => '/wp-includes/js/jquery/jquery.min.js',
+					'placeholder'       => '',
 				],
-			]
+				'delay_js_execution_safe_mode' => [
+					'type'              => 'checkbox',
+					'label'             => __( 'Safe Mode for Delay JavaScript Execution', 'rocket' ),
+					// translators: %1$s = opening <a> tag, %2$s = closing </a> tag.
+					'description'       => __( 'The Safe Mode mode prevents all internal scripts from being delayed.', 'rocket' ),
+					'helper'            => '',
+					'container_class'   => [
+						'wpr-field--parent',
+						'wpr-NoPaddingBottom',
+						'wpr-field--children',
+					],
+					'section'           => 'js',
+					'page'              => 'file_optimization',
+					'parent'            => 'delay_js',
+					'default'           => 0,
+					'sanitize_callback' => 'sanitize_checkbox',
+					'input_attr'        => [
+						'disabled' => 0,
+					],
+					'warning'           => [
+						'title'        => __( 'Performance impact', 'rocket' ),
+						'description'  => __( 'By enabling Safe Mode, you significantly reduce your website performance improvements. We recommend using it only as a temporary solution. If you’re experiencing issues with the Delay JavaScript feature, our support team can help you troubleshoot.', 'rocket' ),
+						'button_label' => __( 'ACTIVATE SAFE MODE', 'rocket' ),
+					],
+				],
+			],
 		);
 	}
 
@@ -849,12 +846,13 @@ class Page extends Abstract_Render {
 		$lazyload_beacon  = $this->beacon->get_suggest( 'lazyload' );
 		$exclude_lazyload = $this->beacon->get_suggest( 'exclude_lazyload' );
 		$dimensions       = $this->beacon->get_suggest( 'image_dimensions' );
+		$fonts            = $this->beacon->get_suggest( 'host_fonts_locally' );
 
 		$this->settings->add_page_section(
 			'media',
 			[
 				'title'            => __( 'Media', 'rocket' ),
-				'menu_description' => __( 'LazyLoad, image dimensions', 'rocket' ),
+				'menu_description' => __( 'LazyLoad, image dimensions, font optimization', 'rocket' ),
 			]
 		);
 
@@ -916,7 +914,7 @@ class Page extends Abstract_Render {
 
 		$this->settings->add_settings_sections(
 			[
-				'lazyload_section'   => [
+				'lazyload_section'          => [
 					'title'       => __( 'LazyLoad', 'rocket' ),
 					'type'        => 'fields_container',
 					// translators: %1$s = opening <a> tag, %2$s = closing </a> tag.
@@ -929,12 +927,20 @@ class Page extends Abstract_Render {
 					// translators: %1$s = “WP Rocket”, %2$s = a list of plugin names.
 					'helper'      => ! empty( $disable_lazyload ) ? sprintf( __( 'LazyLoad is currently activated in %2$s. If you want to use WP Rocket’s LazyLoad, disable this option in %2$s.', 'rocket' ), WP_ROCKET_PLUGIN_NAME, $disable_lazyload ) : '',
 				],
-				'dimensions_section' => [
+				'dimensions_section'        => [
 					'title'       => __( 'Image Dimensions', 'rocket' ),
 					'type'        => 'fields_container',
 					// translators: %1$s = opening <a> tag, %2$s = closing </a> tag.
 					'description' => sprintf( __( 'Add missing width and height attributes to images. Helps prevent layout shifts and improve the reading experience for your visitors. %1$sMore info%2$s', 'rocket' ), '<a href="' . esc_url( $dimensions['url'] ) . '" data-beacon-article="' . esc_attr( $dimensions['id'] ) . '" target="_blank" rel="noopener noreferrer">', '</a>' ),
 					'help'        => $dimensions,
+					'page'        => 'media',
+				],
+				'font_optimization_section' => [
+					'title'       => __( 'Fonts', 'rocket' ),
+					'type'        => 'fields_container',
+					// translators: %1$s = opening <a> tag, %2$s = closing </a> tag.
+					'description' => sprintf( __( 'Download and serve fonts directly from your server. Reduces connections to external servers and minimizes font shifts. %1$sMore info%2$s', 'rocket' ), '<a href="' . esc_url( $fonts['url'] ) . '" data-beacon-article="' . esc_attr( $fonts['id'] ) . '" target="_blank" rel="noopener noreferrer">', '</a>' ),
+					'help'        => $fonts,
 					'page'        => 'media',
 				],
 			]
@@ -1031,6 +1037,14 @@ class Page extends Abstract_Render {
 					'type'              => 'checkbox',
 					'label'             => __( 'Add missing image dimensions', 'rocket' ),
 					'section'           => 'dimensions_section',
+					'page'              => 'media',
+					'default'           => 0,
+					'sanitize_callback' => 'sanitize_checkbox',
+				],
+				'host_fonts_locally'  => [
+					'type'              => 'checkbox',
+					'label'             => __( 'Self-host Google Fonts', 'rocket' ),
+					'section'           => 'font_optimization_section',
 					'page'              => 'media',
 					'default'           => 0,
 					'sanitize_callback' => 'sanitize_checkbox',
@@ -1198,7 +1212,7 @@ class Page extends Abstract_Render {
 			$ecommerce_plugin = _x( 'iThemes Exchange', 'plugin name', 'rocket' );
 		} elseif ( defined( 'JIGOSHOP_VERSION' ) && function_exists( 'jigoshop_get_page_id' ) ) {
 			$ecommerce_plugin = _x( 'Jigoshop', 'plugin name', 'rocket' );
-		} elseif ( defined( 'WPSHOP_VERSION' ) && class_exists( 'wpshop_tools' ) && method_exists( 'wpshop_tools', 'get_page_id' ) ) {
+		} elseif ( defined( 'WPSHOP_VERSION' ) && class_exists( 'wpshop_tools' ) && method_exists( 'wpshop_tools', 'get_page_id' ) ) { // @phpstan-ignore-line
 			$ecommerce_plugin = _x( 'WP-Shop', 'plugin name', 'rocket' );
 		}
 
@@ -1545,11 +1559,7 @@ class Page extends Abstract_Render {
 		 *
 		 * @param array $addons Array of addons.
 		 */
-		$addons = apply_filters( 'rocket_cdn_helper_addons', [] );
-
-		if ( ! is_array( $addons ) ) {
-			$addons = [];
-		}
+		$addons = wpm_apply_filters_typed( 'array', 'rocket_cdn_helper_addons', [] );
 
 		$addons = array_unique( $addons );
 
@@ -2133,8 +2143,8 @@ class Page extends Abstract_Render {
 	 * @param  string $tag_name Name of the HTML tag that will wrap each element of the list.
 	 * @return array
 	 */
-	private function sanitize_and_format_list( $list, $tag_name = 'strong' ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.listFound
-		if ( ! is_array( $list ) || empty( $list ) ) {
+	private function sanitize_and_format_list( array $list, $tag_name = 'strong' ) { // phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.listFound
+		if ( empty( $list ) ) {
 			return [];
 		}
 
@@ -2168,21 +2178,6 @@ class Page extends Abstract_Render {
 		}
 
 		return ! (bool) get_rocket_option( 'minify_js', 0 );
-	}
-
-	/**
-	 * Checks if combine CSS option should be disabled
-	 *
-	 * @since 3.11
-	 *
-	 * @return bool
-	 */
-	private function disable_combine_css(): bool {
-		if ( (bool) get_rocket_option( 'remove_unused_css', 0 ) ) {
-			return true;
-		}
-
-		return ! (bool) get_rocket_option( 'minify_css', 0 );
 	}
 
 	/**
@@ -2221,7 +2216,7 @@ class Page extends Abstract_Render {
 
 		if ( ! current_user_can( 'rocket_manage_options' ) ) {
 			wp_send_json_error();
-			return;
+			return; // @phpstan-ignore-line
 		}
 
 		$this->options->set( 'cache_mobile', 1 );
@@ -2260,7 +2255,7 @@ class Page extends Abstract_Render {
 		}
 
 		if ( 'settings_page_wprocket' !== get_current_screen()->id ) {
-			return false;
+			return;
 		}
 
 		$boxes = get_user_meta( get_current_user_id(), 'rocket_boxes', true );
@@ -2276,25 +2271,23 @@ class Page extends Abstract_Render {
 			return;
 		}
 
-		// Bail-out if previous version is greater than 3.16.
-		if ( $previous_version > '3.16' ) {
+		// Bail-out if previous version is greater than 3.17.
+		if ( $previous_version > '3.17' ) {
 			return;
 		}
 
-		$critical_images_beacon = $this->beacon->get_suggest( 'optimize_critical_images' );
-		$remove_cache_tab       = $this->beacon->get_suggest( 'remove_cache_tab' );
+		$lazy_render_content = $this->beacon->get_suggest( 'lazy_render_content' );
 
 		rocket_notice_html(
 			[
 				'status'         => 'info',
 				'dismissible'    => '',
 				'message'        => sprintf(
-					// translators: %1$s: opening strong tag, %2$s: closing strong tag, %3$s: opening a tag, %4$s: option a tag, %5$s: opening a tag.
-					__( '%1$sWP Rocket:%2$s the plugin has been updated to the 3.16 version. Our brand new feature %3$sOptimize critical images%5$s is automatically activated now! Also, the Cache tab was removed but the existing features will remain working, %4$ssee more here%5$s.', 'rocket' ),
+					// translators: %1$s: opening strong tag, %2$s: closing strong tag, %3$s: opening a tag, %4$s: opening a tag.
+					__( '%1$sWP Rocket:%2$s the plugin has been updated to the 3.17 version. New feature: %3$sAutomatic Lazy Rendering%4$s. Check out our documentation to learn more about it.', 'rocket' ),
 					'<strong>',
 					'</strong>',
-					'<a href="' . esc_url( $critical_images_beacon['url'] ) . '" data-beacon-article="' . esc_attr( $critical_images_beacon['id'] ) . '" target="_blank" rel="noopener noreferrer">',
-					'<a href="' . esc_url( $remove_cache_tab['url'] ) . '" data-beacon-article="' . esc_attr( $remove_cache_tab['id'] ) . '" target="_blank" rel="noopener noreferrer">',
+					'<a href="' . esc_url( $lazy_render_content['url'] ) . '" data-beacon-article="' . esc_attr( $lazy_render_content['id'] ) . '" target="_blank" rel="noopener noreferrer">',
 					'</a>'
 				),
 				'dismiss_button' => 'rocket_update_notice',

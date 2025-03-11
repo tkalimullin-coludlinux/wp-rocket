@@ -125,7 +125,7 @@ add_filter( 'user_row_actions', 'rocket_user_row_actions', 10, 2 );
  *
  * @since 3.6   Reverse dependency with rocket_dismiss_box().
  * @since 2.4   Add a delete_transient on function name (box name).
- * @since 1.3.0 $args can replace $_GET when called internaly.
+ * @since 1.3.0 $args can replace $_GET when called internally.
  * @since 1.1.10
  *
  * @param array $args An array of query args. Should not be used: see rocket_dismiss_box().
@@ -327,6 +327,12 @@ function rocket_analytics_data() {
 	$data['license_type'] = '';
 	if ( false !== $customer_data ) {
 		$data['license_type'] = rocket_get_license_type( $customer_data );
+	}
+
+	$media_font_data = get_transient( 'rocket_fonts_data_collection' );
+
+	if ( false !== $media_font_data ) {
+		$data = array_merge( $data, $media_font_data );
 	}
 
 	return $data;

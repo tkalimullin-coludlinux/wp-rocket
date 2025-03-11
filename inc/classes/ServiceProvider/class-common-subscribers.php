@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 namespace WP_Rocket\ServiceProvider;
 
 use WP_Rocket\Dependencies\League\Container\ServiceProvider\AbstractServiceProvider;
@@ -34,7 +36,6 @@ class Common_Subscribers extends AbstractServiceProvider {
 	 * @return void
 	 */
 	public function register(): void {
-		$this->getContainer()->addShared( 'detect_missing_tags_subscriber', Detect_Missing_Tags_Subscriber::class )
-			->addTag( 'common_subscriber' );
+		$this->getContainer()->addShared( 'detect_missing_tags_subscriber', Detect_Missing_Tags_Subscriber::class );
 	}
 }

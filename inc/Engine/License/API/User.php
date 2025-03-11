@@ -13,7 +13,7 @@ class User {
 	/**
 	 * Instantiate the class
 	 *
-	 * @param object $user The user object.
+	 * @param object|false $user The user object.
 	 */
 	public function __construct( $user ) {
 		$this->user = is_object( $user ) ? $user : new \stdClass();
@@ -132,5 +132,17 @@ class User {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Get available upgrades from the API.
+	 *
+	 * @return array
+	 */
+	public function get_available_upgrades() {
+		if ( empty( $this->user->licence->prices->upgrades ) ) {
+			return [];
+		}
+		return (array) $this->user->licence->prices->upgrades;
 	}
 }
